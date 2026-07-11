@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 class AppColors {
   static const Color obsidianBgStart = Color(0xFF0A0D14);
   static const Color obsidianBgEnd = Color(0xFF141923);
-  
+
   static const Color accentNeonGreen = Color(0xFFCCFF00); // Electric lime green
-  static const Color accentNeonCyan = Color(0xFF00E5FF);  // High-tech cyber cyan
+  static const Color accentNeonCyan = Color(0xFF00E5FF); // High-tech cyber cyan
   static const Color accentBlue = Color(0xFF2979FF);
-  
-  static const Color glassCardBg = Color(0x0DFFFFFF);     // Semi-transparent glass background
+
+  static const Color glassCardBg = Color(
+    0x0DFFFFFF,
+  ); // Semi-transparent glass background
   static const Color glassCardBorder = Color(0x1AFFFFFF); // Soft white border
-  
+
   static const Color textPrimary = Color(0xFFF5F6F9);
   static const Color textSecondary = Color(0xFF8E9AA8);
   static const Color textMuted = Color(0xFF5D6B7C);
@@ -59,10 +61,18 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0x33000000), // Equivalent to Colors.black.withOpacity(0.2)
+        fillColor: const Color(
+          0x33000000,
+        ), // Equivalent to Colors.black.withOpacity(0.2)
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.glassCardBorder),
@@ -73,7 +83,10 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.accentNeonCyan, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppColors.accentNeonCyan,
+            width: 1.5,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -92,10 +105,7 @@ class AppTheme {
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          AppColors.obsidianBgStart,
-          AppColors.obsidianBgEnd,
-        ],
+        colors: [AppColors.obsidianBgStart, AppColors.obsidianBgEnd],
       ),
     );
   }
