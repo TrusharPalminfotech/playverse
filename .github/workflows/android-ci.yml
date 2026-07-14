@@ -68,7 +68,7 @@ jobs:
       - name: Distribute APK to Firebase
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
-          appId: YOUR_FIREBASE_ANDROID_APP_ID
+          appId: 1:571465372112:android:718ba8173d05bf38c069d5
           token: ${{ secrets.FIREBASE_TOKEN }}
           groups: qa-testers
           file: build/app/outputs/flutter-apk/app-release.apk
