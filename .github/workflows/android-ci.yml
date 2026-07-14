@@ -12,18 +12,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repository
+      # Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Install Java (Required for Android)
+      # Setup Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
-      # Install Flutter
+      # Setup Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -40,15 +40,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
-      # Install Packages
+      # Install Dependencies
       - name: Install Dependencies
         run: flutter pub get
 
-      # Static Analysis
+      # Analyze Project
       - name: Analyze Project
         run: flutter analyze
 
-      # Uncomment after adding tests
+      # Run Tests (Optional)
       # - name: Run Tests
       #   run: flutter test
 
@@ -56,9 +56,25 @@ jobs:
       - name: Build Release APK
         run: flutter build apk --release
 
-      # Upload APK
+      # Upload APK as GitHub Artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+
+      # Upload to Firebase App Distribution
+      - name: Distribute APK to Firebase
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: YOUR_FIREBASE_ANDROID_APP_ID
+          token: ${{ secrets.FIREBASE_TOKEN }}
+          groups: qa-testers
+          file: build/app/outputs/flutter-apk/app-release.apk
+          releaseNotes: |
+            🚀 Automated Android Build
+
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
