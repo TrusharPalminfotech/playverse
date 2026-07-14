@@ -1,0 +1,64 @@
+name: Android CI Build
+
+on:
+  push:
+    branches:
+      - android-app
+  workflow_dispatch:
+
+jobs:
+  build_android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Install Java (Required for Android)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Install Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.7"
+          channel: stable
+          cache: true
+
+      # Cache Pub Packages
+      - name: Cache Pub Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      # Install Packages
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # Static Analysis
+      - name: Analyze Project
+        run: flutter analyze
+
+      # Uncomment after adding tests
+      # - name: Run Tests
+      #   run: flutter test
+
+      # Build Release APK
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      # Upload APK
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
