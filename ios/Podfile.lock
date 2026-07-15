@@ -1,0 +1,25 @@
+PODS:
+  - Flutter (1.0.0)
+  - GoogleMaps (9.4.0):
+    - GoogleMaps/Maps (= 9.4.0)
+  - GoogleMaps/Maps (9.4.0)
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - GoogleMaps (~> 9.0)
+
+SPEC REPOS:
+  trunk:
+    - GoogleMaps
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  GoogleMaps: 0608099d4870cac8754bdba9b6953db543432438
+
+PODFILE CHECKSUM: 25ce454b1d30df8a4381fdca1498aab58e1f647b
+
+COCOAPODS: 1.16.2
