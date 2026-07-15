@@ -149,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(width: 16),
               const Text(
-                'PLAYVERSE',
+                'GAMEVERSE',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
