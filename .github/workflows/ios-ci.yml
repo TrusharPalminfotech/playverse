@@ -8,54 +8,69 @@ on:
 
 jobs:
   build_ios:
+    name: Build & Upload iOS
     runs-on: macos-latest
 
     env:
+      FLUTTER_VERSION: "3.41.7"
       CERTIFICATE_PATH: /tmp/certificate.p12
-      PP_PATH: /tmp/profile.mobileprovision
+      PROFILE_PATH: /tmp/profile.mobileprovision
       KEYCHAIN_PATH: /tmp/app-signing.keychain-db
+      KEYCHAIN_PASSWORD: temp123
 
     steps:
+      # Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      - name: Install Dependencies
+      # Java (recommended for Flutter builds)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Dependencies
+      - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Analyze Project
+      # Analyze
+      - name: Analyze Flutter Project
         run: flutter analyze
 
+      # CocoaPods
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
 
-      # Decode Distribution Certificate
+      ####################################################
+      # Signing
+      ####################################################
+
       - name: Decode Distribution Certificate
         run: |
           echo "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}" | base64 --decode > "$CERTIFICATE_PATH"
 
-      # Decode Provisioning Profile
       - name: Decode Provisioning Profile
         run: |
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > "$PP_PATH"
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > "$PROFILE_PATH"
 
-      # Create Temporary Keychain
-      - name: Create Keychain
+      - name: Create Temporary Keychain
         run: |
-          security create-keychain -p "temp123" "$KEYCHAIN_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "temp123" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      # Import Certificate
-      - name: Import Certificate
+      - name: Import Distribution Certificate
         run: |
           security import "$CERTIFICATE_PATH" \
             -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
@@ -67,52 +82,80 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
 
-      # Install Provisioning Profile
       - name: Install Provisioning Profile
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$PP_PATH")")
+          UUID=$(security cms -D -i "$PROFILE_PATH" | \
+          /usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin)
 
-          cp "$PP_PATH" \
-            ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          cp "$PROFILE_PATH" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
-      # Build IPA
-      - name: Build IPA
+      ####################################################
+      # Build
+      ####################################################
+
+      - name: Build Signed IPA
         run: |
           flutter build ipa \
             --release \
             --export-method app-store
 
-      # Find IPA
-      - name: Find IPA
-        id: ipa
-        run: |
-          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
-          echo "ipa_path=$IPA_PATH" >> "$GITHUB_OUTPUT"
-          echo "IPA Found: $IPA_PATH"
+      ####################################################
+      # Verify
+      ####################################################
 
-      # Upload IPA Artifact
+      - name: Verify Generated IPA
+        run: |
+          ls -la build/ios/ipa
+
+          IPA=$(find build/ios/ipa -name "*.ipa" | head -1)
+
+          if [ -z "$IPA" ]; then
+            echo "IPA file not found."
+            exit 1
+          fi
+
+          echo "IPA_PATH=$IPA" >> $GITHUB_ENV
+          echo "Found IPA: $IPA"
+
+      ####################################################
+      # Artifact
+      ####################################################
+
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
-          path: ${{ steps.ipa.outputs.ipa_path }}
+          name: ios-release-ipa
+          path: ${{ env.IPA_PATH }}
+          if-no-files-found: error
 
-      # Create App Store Connect API Key
-      - name: Create API Key
+      ####################################################
+      # App Store Connect API
+      ####################################################
+
+      - name: Create App Store Connect API Key
         env:
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
           APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APPSTORE_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
 
-      # Upload to TestFlight
+          printf "%s" "$APPSTORE_PRIVATE_KEY" \
+            > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
+
+      ####################################################
+      # Upload TestFlight
+      ####################################################
+
       - name: Upload to TestFlight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
         run: |
           xcrun iTMSTransporter \
             -m upload \
-            -assetFile "${{ steps.ipa.outputs.ipa_path }}" \
-            -apiKey "${{ secrets.APPSTORE_KEY_ID }}" \
-            -apiIssuer "${{ secrets.APPSTORE_ISSUER_ID }}"
+            -assetFile "$IPA_PATH" \
+            -apiKey "$KEY_ID" \
+            -apiIssuer "$ISSUER_ID"
