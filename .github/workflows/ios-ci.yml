@@ -8,8 +8,14 @@ on:
 
 jobs:
   build_ios:
-    name: Build iOS IPA
+    name: Build Signed iOS IPA
     runs-on: macos-latest
+
+    env:
+      CERTIFICATE_PATH: /tmp/certificate.p12
+      PP_PATH: /tmp/profile.mobileprovision
+      KEYCHAIN_PATH: /tmp/app-signing.keychain-db
+      EXPORT_OPTIONS_PATH: /tmp/ExportOptions.plist
 
     steps:
       - name: Checkout Repository
@@ -22,18 +28,10 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Cache Pub Dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Install Dependencies
+      - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Analyze Project
+      - name: Flutter Analyze
         run: flutter analyze
 
       - name: Install CocoaPods
@@ -41,5 +39,47 @@ jobs:
           cd ios
           pod install
 
-      - name: Build iOS (No Codesign)
-        run: flutter build ios --release --no-codesign
+      # Decode Distribution Certificate
+      - name: Decode Distribution Certificate
+        run: |
+          echo "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}" | base64 --decode > $CERTIFICATE_PATH
+
+      # Decode Provisioning Profile
+      - name: Decode Provisioning Profile
+        run: |
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > $PP_PATH
+
+      # Create Temporary Keychain
+      - name: Create Keychain
+        run: |
+          security create-keychain -p "temp123" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "temp123" $KEYCHAIN_PATH
+
+      # Import Certificate
+      - name: Import Distribution Certificate
+        run: |
+          security import $CERTIFICATE_PATH \
+            -k $KEYCHAIN_PATH \
+            -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
+            -T /usr/bin/codesign
+
+          security list-keychains -d user -s $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+
+      # Install Provisioning Profile
+      - name: Install Provisioning Profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      # Build Signed IPA
+      - name: Build IPA
+        run: flutter build ipa --release
+
+      # Upload IPA
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/*.ipa
