@@ -37,24 +37,24 @@ jobs:
           cd ios
           pod install
 
-      # Decode certificate
+      # Decode Distribution Certificate
       - name: Decode Distribution Certificate
         run: |
-          echo "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}" | base64 --decode > $CERTIFICATE_PATH
+          echo "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}" | base64 --decode > "$CERTIFICATE_PATH"
 
-      # Decode provisioning profile
+      # Decode Provisioning Profile
       - name: Decode Provisioning Profile
         run: |
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > $PP_PATH
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > "$PP_PATH"
 
-      # Create temporary keychain
+      # Create Temporary Keychain
       - name: Create Keychain
         run: |
-          security create-keychain -p "temp123" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "temp123" $KEYCHAIN_PATH
+          security create-keychain -p "temp123" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "temp123" "$KEYCHAIN_PATH"
 
-      # Import certificate
+      # Import Certificate
       - name: Import Certificate
         run: |
           security import "$CERTIFICATE_PATH" \
@@ -67,44 +67,52 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
 
-      # Install provisioning profile
+      # Install Provisioning Profile
       - name: Install Provisioning Profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
-          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i $PP_PATH)")
+          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$PP_PATH")")
 
           cp "$PP_PATH" \
-          ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+            ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
       # Build IPA
       - name: Build IPA
         run: |
           flutter build ipa \
             --release \
-            --export-method app-store-connect
+            --export-method app-store
 
-      # Upload IPA artifact
+      # Find IPA
+      - name: Find IPA
+        id: ipa
+        run: |
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+          echo "ipa_path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+          echo "IPA Found: $IPA_PATH"
+
+      # Upload IPA Artifact
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: build/ios/ipa/*.ipa
+          path: ${{ steps.ipa.outputs.ipa_path }}
 
       # Create App Store Connect API Key
       - name: Create API Key
+        env:
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-
-          cat <<EOF > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPSTORE_KEY_ID }}.p8
-${{ secrets.APPSTORE_PRIVATE_KEY }}
-EOF
+          echo "$APPSTORE_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
 
       # Upload to TestFlight
       - name: Upload to TestFlight
         run: |
           xcrun iTMSTransporter \
             -m upload \
-            -assetFile build/ios/ipa/*.ipa \
+            -assetFile "${{ steps.ipa.outputs.ipa_path }}" \
             -apiKey "${{ secrets.APPSTORE_KEY_ID }}" \
             -apiIssuer "${{ secrets.APPSTORE_ISSUER_ID }}"
