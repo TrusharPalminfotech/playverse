@@ -400,7 +400,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         : Icons.visibility_outlined,
                     color: AppColors.textSecondary,
                   ),
-                  onPressed: () {
+                  onPressed: () { 
                     setState(() {
                       _obscurePassword = !_obscurePassword;
                     });
