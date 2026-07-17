@@ -163,31 +163,100 @@ jobs:
       # Build
       # --------------------------------------------------
 
+      ####################################################
+      # Build IPA
+      ####################################################
+
       - name: Build IPA
         run: |
           flutter build ipa \
             --release \
-            --export-method app-store
+            --export-options-plist=ios/ExportOptions.plist
+
+
+      ####################################################
+      # Debug Build Output
+      ####################################################
+
+      - name: Debug Build Output
+        if: always()
+        run: |
+          echo "=============================="
+          echo "Flutter Version"
+          echo "=============================="
+          flutter --version
+
+          echo ""
+          echo "=============================="
+          echo "Xcode Version"
+          echo "=============================="
+          xcodebuild -version
+
+          echo ""
+          echo "=============================="
+          echo "Installed Provisioning Profiles"
+          echo "=============================="
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles || true
+
+          echo ""
+          echo "=============================="
+          echo "Code Signing Identities"
+          echo "=============================="
+          security find-identity -v -p codesigning || true
+
+          echo ""
+          echo "=============================="
+          echo "Build Folder"
+          echo "=============================="
+          ls -R build || true
+
+          echo ""
+          echo "=============================="
+          echo "XCArchive"
+          echo "=============================="
+          find build -name "*.xcarchive" || true
+
+          echo ""
+          echo "=============================="
+          echo "IPA Files"
+          echo "=============================="
+          find build -name "*.ipa" || true
+
+          echo ""
+          echo "=============================="
+          echo "Archive Info"
+          echo "=============================="
+          find build/ios/archive -maxdepth 3 -type f || true
 
       # --------------------------------------------------
       # Locate IPA
       # --------------------------------------------------
 
+      ####################################################
+      # Locate IPA
+      ####################################################
+
       - name: Locate IPA
         id: ipa
         run: |
-          IPA=$(find build/ios/ipa -name "*.ipa" | head -1)
+          IPA=$(find build -name "*.ipa" | head -1)
 
           if [ -z "$IPA" ]; then
-            echo "IPA not found!"
+            echo "====================================="
+            echo "ERROR: IPA NOT FOUND"
+            echo "====================================="
+
+            echo ""
+            echo "Available files:"
+            find build -type f || true
+
             exit 1
           fi
 
-          echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
-
-          echo "Found IPA:"
+          echo "IPA Found:"
           echo "$IPA"
 
+          echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
       # --------------------------------------------------
       # Upload Artifact
       # --------------------------------------------------
