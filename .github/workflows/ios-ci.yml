@@ -32,6 +32,15 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install Fastlane
+        run: bundle install
+
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:
@@ -91,11 +100,27 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
+      - name: Get Next TestFlight Build Number
+        working-directory: ios
+        env:
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          bundle exec fastlane next_build_number
+
+      - name: Read Build Number
+        id: build
+        run: |
+          BUILD=$(cat ios/next_build.txt)
+          echo "number=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Next Build Number: $BUILD"          
+
       - name: Build IPA
         run: |
           flutter build ipa \
             --release \
-            --build-number=${{ github.run_number }} \
+            --build-number=${{ steps.build.outputs.number }} \
             --export-options-plist=ios/ExportOptions.plist
 
       - name: Verify Build
