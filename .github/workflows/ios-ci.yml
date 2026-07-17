@@ -1,3 +1,4 @@
+# Production-ready GitHub Actions workflow for Flutter iOS -> TestFlight
 name: iOS CI Build & Upload TestFlight
 
 on:
@@ -8,7 +9,6 @@ on:
 
 jobs:
   build_ios:
-    name: Build & Upload iOS
     runs-on: macos-latest
 
     env:
@@ -19,272 +19,102 @@ jobs:
       KEYCHAIN_PASSWORD: temp123
 
     steps:
-      # --------------------------------------------------
-      # Checkout
-      # --------------------------------------------------
+      - uses: actions/checkout@v4
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # --------------------------------------------------
-      # Java
-      # --------------------------------------------------
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # --------------------------------------------------
-      # Flutter
-      # --------------------------------------------------
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      - name: Install Flutter Dependencies
-        run: flutter pub get
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
-      - name: Analyze Flutter Project
-        run: flutter analyze
+      - run: flutter clean
+      - run: flutter pub get
+      - run: flutter analyze
 
-      - name: Install CocoaPods
+      - name: Build Information
         run: |
+          grep "^version:" pubspec.yaml
+          echo "Run Number: ${{ github.run_number }}"
+          git rev-parse --short HEAD
+
+      - run: |
           cd ios
           pod install
-
-      # --------------------------------------------------
-      # Decode Signing Assets
-      # --------------------------------------------------
 
       - name: Decode Distribution Certificate
         env:
           CERTIFICATE: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}
-        run: |
-          printf "%s" "$CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
-
-          echo "Certificate Size:"
-          ls -lh "$CERTIFICATE_PATH"
+        run: printf "%s" "$CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
 
       - name: Decode Provisioning Profile
         env:
           PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: printf "%s" "$PROFILE" | base64 --decode > "$PROFILE_PATH"
+
+      - name: Create Keychain
         run: |
-          printf "%s" "$PROFILE" | base64 --decode > "$PROFILE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
 
-          echo "Provisioning Profile Size:"
-          ls -lh "$PROFILE_PATH"
-
-          file "$PROFILE_PATH"
-
-      # --------------------------------------------------
-      # Keychain
-      # --------------------------------------------------
-
-      - name: Create Temporary Keychain
-        run: |
-          security create-keychain \
-            -p "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security unlock-keychain \
-            -p "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security set-keychain-settings \
-            -lut 21600 \
-            "$KEYCHAIN_PATH"
-
-          security list-keychains \
-            -d user \
-            -s "$KEYCHAIN_PATH"
-
-          security default-keychain \
-            -s "$KEYCHAIN_PATH"
-
-      - name: Import Distribution Certificate
+      - name: Import Certificate
         run: |
           security import "$CERTIFICATE_PATH" \
             -k "$KEYCHAIN_PATH" \
             -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
-            -A \
-            -t cert \
-            -f pkcs12
-
+            -A -t cert -f pkcs12
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-      - name: Verify Certificate
-        run: |
-          security find-identity -v -p codesigning
-
-      # --------------------------------------------------
-      # Provisioning Profile
-      # --------------------------------------------------
-
-      - name: Verify Provisioning Profile
-        run: |
-          security cms -D -i "$PROFILE_PATH" > /tmp/profile.plist
-
-          echo "Profile Name:"
-          /usr/libexec/PlistBuddy \
-            -c "Print :Name" \
-            /tmp/profile.plist
-
-          echo "UUID:"
-          /usr/libexec/PlistBuddy \
-            -c "Print :UUID" \
-            /tmp/profile.plist
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
       - name: Install Provisioning Profile
         run: |
+          security cms -D -i "$PROFILE_PATH" > /tmp/profile.plist
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-
-          UUID=$(
-            /usr/libexec/PlistBuddy \
-            -c "Print :UUID" \
-            /tmp/profile.plist
-          )
-
-          cp "$PROFILE_PATH" \
-            "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
-
-          echo "Installed Profile UUID: $UUID"
-
-      # --------------------------------------------------
-      # Build
-      # --------------------------------------------------
-
-      ####################################################
-      # Build IPA
-      ####################################################
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
       - name: Build IPA
         run: |
           flutter build ipa \
             --release \
+            --build-number=${{ github.run_number }} \
             --export-options-plist=ios/ExportOptions.plist
 
-
-      ####################################################
-      # Debug Build Output
-      ####################################################
-
-      - name: Debug Build Output
-        if: always()
+      - name: Verify Build
         run: |
-          echo "=============================="
-          echo "Flutter Version"
-          echo "=============================="
-          flutter --version
-
-          echo ""
-          echo "=============================="
-          echo "Xcode Version"
-          echo "=============================="
-          xcodebuild -version
-
-          echo ""
-          echo "=============================="
-          echo "Installed Provisioning Profiles"
-          echo "=============================="
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles || true
-
-          echo ""
-          echo "=============================="
-          echo "Code Signing Identities"
-          echo "=============================="
-          security find-identity -v -p codesigning || true
-
-          echo ""
-          echo "=============================="
-          echo "Build Folder"
-          echo "=============================="
-          ls -R build || true
-
-          echo ""
-          echo "=============================="
-          echo "XCArchive"
-          echo "=============================="
-          find build -name "*.xcarchive" || true
-
-          echo ""
-          echo "=============================="
-          echo "IPA Files"
-          echo "=============================="
-          find build -name "*.ipa" || true
-
-          echo ""
-          echo "=============================="
-          echo "Archive Info"
-          echo "=============================="
-          find build/ios/archive -maxdepth 3 -type f || true
-
-      # --------------------------------------------------
-      # Locate IPA
-      # --------------------------------------------------
-
-      ####################################################
-      # Locate IPA
-      ####################################################
+          APP=$(find build/ios/archive -name Runner.app | head -1)
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Info.plist"
 
       - name: Locate IPA
         id: ipa
         run: |
           IPA=$(find build -name "*.ipa" | head -1)
-
-          if [ -z "$IPA" ]; then
-            echo "====================================="
-            echo "ERROR: IPA NOT FOUND"
-            echo "====================================="
-
-            echo ""
-            echo "Available files:"
-            find build -type f || true
-
-            exit 1
-          fi
-
-          echo "IPA Found:"
-          echo "$IPA"
-
+          test -n "$IPA"
           echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
-      # --------------------------------------------------
-      # Upload Artifact
-      # --------------------------------------------------
 
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: ios-release-ipa
           path: ${{ steps.ipa.outputs.ipa }}
-          if-no-files-found: error
-
-      # --------------------------------------------------
-      # App Store Connect API Key
-      # --------------------------------------------------
-
-      # - name: Create App Store Connect API Key
-      #   env:
-      #     APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
-      #     APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
-      #   run: |
-      #     mkdir -p ~/.appstoreconnect/private_keys
-
-      #     printf "%s" "$APPSTORE_PRIVATE_KEY" \
-      #       > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
-
-      # --------------------------------------------------
-      # Upload to TestFlight
-      # --------------------------------------------------
 
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
@@ -293,3 +123,7 @@ jobs:
           issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
           api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+
+      - name: Cleanup
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
