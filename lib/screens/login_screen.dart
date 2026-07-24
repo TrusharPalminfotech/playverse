@@ -165,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
-                  'ADMIN',
+                  'MainAdmin',
                   style: TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
@@ -400,7 +400,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         : Icons.visibility_outlined,
                     color: AppColors.textSecondary,
                   ),
-                  onPressed: () { 
+                  onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;
                     });
