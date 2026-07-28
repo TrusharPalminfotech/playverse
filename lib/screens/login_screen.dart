@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/validators.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -367,17 +368,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: AppColors.textSecondary,
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your email';
-                }
-                if (!RegExp(
-                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                ).hasMatch(value)) {
-                  return 'Please enter a valid email address';
-                }
-                return null;
-              },
+              validator: Validators.validateEmail,
             ),
             const SizedBox(height: 20),
 
@@ -407,15 +398,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your password';
-                }
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
+              validator: Validators.validatePassword,
             ),
 
             // Forgot Password Link

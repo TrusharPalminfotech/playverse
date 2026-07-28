@@ -35,9 +35,9 @@ jobs:
       - name: Analyze project
         run: flutter analyze
 
-      # Uncomment if you have tests
-      # - name: Run tests
-      #   run: flutter test
+      # Run tests
+      - name: Run tests
+        run: flutter test
 
       - name: Build Flutter Web
         run: flutter build web --release
