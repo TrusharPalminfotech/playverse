@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       darkTheme: AppTheme.darkTheme,
       theme: AppTheme.darkTheme, // Fallback
-      home: const LoginScreen(),
+      home: LoginScreen(),
     );
   }
 }

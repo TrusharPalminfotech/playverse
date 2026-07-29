@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
+import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final AuthService authService;
+
+  LoginScreen({
+    super.key,
+    AuthService? authService,
+  }) : authService = authService ?? AuthService();
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -33,19 +39,55 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = true;
       });
 
-      // Simulate a network/auth request
-      Future.delayed(const Duration(seconds: 1), () {
+      widget.authService.login(
+        _emailController.text,
+        _passwordController.text,
+        _selectedRole,
+      ).then((success) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: AppColors.accentNeonCyan,
+                content: Text(
+                  'Success: Authenticated as $_selectedRole!',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: Colors.redAccent,
+                content: Text(
+                  'Error: Authentication failed!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      }).catchError((error) {
         if (mounted) {
           setState(() {
             _isLoading = false;
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: AppColors.accentNeonCyan,
+              backgroundColor: Colors.redAccent,
               content: Text(
-                'Success: Authenticated as $_selectedRole!',
+                'Error: ${error.toString()}',
                 style: const TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),

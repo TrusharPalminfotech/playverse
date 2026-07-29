@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:playverseadmin/main.dart';
@@ -9,8 +10,40 @@ void configureViewSize(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+int totalCases = 0;
+int passedCases = 0;
+int failedCases = 0;
+
+void runWidgetTest(
+  String description,
+  Future<void> Function(WidgetTester) body,
+) {
+  totalCases++;
+  testWidgets(description, (WidgetTester tester) async {
+    print('Running Widget Test: $description');
+    try {
+      await body(tester);
+      passedCases++;
+      print('Passed Widget Test: $description');
+    } catch (e) {
+      failedCases++;
+      print('Failed Widget Test: $description - Error: $e');
+      rethrow;
+    }
+  });
+}
+
 void main() {
-  testWidgets('Login screen loads and displays essential elements', (
+  tearDownAll(() {
+    print('\n=======================================');
+    print('WIDGET TEST SUMMARY:');
+    print('Total Cases: $totalCases');
+    print('Passed Cases: $passedCases');
+    print('Failed Cases: $failedCases');
+    print('=======================================\n');
+  });
+
+  runWidgetTest('Login screen loads and displays essential elements', (
     WidgetTester tester,
   ) async {
     configureViewSize(tester);
@@ -30,7 +63,7 @@ void main() {
     expect(find.text('Organizer'), findsOneWidget);
   });
 
-  testWidgets('Submitting empty form triggers validation errors', (
+  runWidgetTest('Submitting empty form triggers validation errors', (
     WidgetTester tester,
   ) async {
     configureViewSize(tester);
@@ -49,7 +82,7 @@ void main() {
     expect(find.text('Please enter your password'), findsOneWidget);
   });
 
-  testWidgets('Entering invalid email format triggers validation error', (
+  runWidgetTest('Entering invalid email format triggers validation error', (
     WidgetTester tester,
   ) async {
     configureViewSize(tester);
@@ -70,29 +103,30 @@ void main() {
     expect(find.text('Please enter your password'), findsOneWidget);
   });
 
-  testWidgets('Entering valid credentials and submitting triggers loading state', (
-    WidgetTester tester,
-  ) async {
-    configureViewSize(tester);
+  runWidgetTest(
+    'Entering valid credentials and submitting triggers loading state',
+    (WidgetTester tester) async {
+      configureViewSize(tester);
 
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+      // Build our app and trigger a frame.
+      await tester.pumpWidget(const MyApp());
 
-    // Enter valid email and password
-    final emailFieldFinder = find.byType(TextFormField).first;
-    final passwordFieldFinder = find.byType(TextFormField).at(1);
+      // Enter valid email and password
+      final emailFieldFinder = find.byType(TextFormField).first;
+      final passwordFieldFinder = find.byType(TextFormField).at(1);
 
-    await tester.enterText(emailFieldFinder, 'admin@playverse.com');
-    await tester.enterText(passwordFieldFinder, 'password123');
+      await tester.enterText(emailFieldFinder, 'admin@playverse.com');
+      await tester.enterText(passwordFieldFinder, 'password123');
 
-    // Tap the login button
-    await tester.tap(find.text('SECURE LOG IN'));
-    await tester.pump(); // Start execution
+      // Tap the login button
+      await tester.tap(find.text('SECURE LOG IN'));
+      await tester.pump(); // Start execution
 
-    // Verify the loading indicator is shown (ElevatedButton replacement/loading state)
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      // Verify the loading indicator is shown (ElevatedButton replacement/loading state)
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    // Wait for the simulated delay and snackbar animation to complete so no timers are left pending
-    await tester.pumpAndSettle();
-  });
+      // Wait for the simulated delay and snackbar animation to complete so no timers are left pending
+      await tester.pumpAndSettle();
+    },
+  );
 }

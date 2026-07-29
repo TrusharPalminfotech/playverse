@@ -5,7 +5,21 @@ on:
   push:
     branches:
       - ios-app
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   build_ios:
@@ -19,29 +33,96 @@ jobs:
       KEYCHAIN_PASSWORD: temp123
 
     steps:
+      # Step 1: Checkout (fetch-depth: 0 is required for SonarCloud scan accuracy)
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # Step 2: Setup Java (required for running tests / analysis dependencies)
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+      # Step 3: Setup Flutter (uses caching to avoid downloading packaging items)
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
+      # Step 3b: Cache Pub Packages (Performance Optimization)
+      - name: Cache Pub Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      # Step 4: Install Dependencies (Avoid clean unless required to leverage caching)
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Step 5: Run Build Runner code generation for Mock tests
+      - name: Run Build Runner
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      # Step 6: Flutter Analyze (fails if analyzer reports errors)
+      - name: Analyze Project
+        run: flutter analyze
+
+      # Step 7: Flutter Test with Coverage
+      - name: Run Tests with Coverage
+        run: flutter test --coverage
+
+      # Step 7b: Validate Coverage File Exists (fails immediately if missing)
+      - name: Validate Coverage File Exists
+        run: |
+          if [ ! -f "coverage/lcov.info" ]; then
+            echo "Error: coverage/lcov.info is missing!"
+            exit 1
+          fi
+
+      # Step 7c: Upload Coverage Artifacts for Debugging
+      - name: Upload Coverage Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-coverage
+          path: coverage/
+          retention-days: 7
+
+      # Step 8: SonarCloud Scan (uses stable pinned SonarQube scan action compatible with SonarCloud)
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Step 9: SonarCloud Quality Gate Check (uses stable pinned Quality Gate action)
+      - name: SonarCloud Quality Gate check
+        uses: sonarsource/sonarqube-quality-gate-action@v1
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ----------------------------------------------------
+      # iOS COMPILATION & DEPLOYMENT (Only run on ios-app branch pushes)
+      # ----------------------------------------------------
+
       - name: Setup Ruby
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.2"
           bundler-cache: true
 
       - name: Install Fastlane
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: bundle install
 
       - name: Cache CocoaPods
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         uses: actions/cache@v4
         with:
           path: |
@@ -51,32 +132,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - run: flutter clean
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-
       - name: Build Information
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           grep "^version:" pubspec.yaml
           echo "Run Number: ${{ github.run_number }}"
           git rev-parse --short HEAD
 
-      - run: |
+      - name: Install Pods
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
+        run: |
           cd ios
           pod install
 
       - name: Decode Distribution Certificate
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         env:
           CERTIFICATE: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}
         run: printf "%s" "$CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
 
       - name: Decode Provisioning Profile
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         env:
           PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
         run: printf "%s" "$PROFILE" | base64 --decode > "$PROFILE_PATH"
 
       - name: Create Keychain
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -85,6 +167,7 @@ jobs:
           security default-keychain -s "$KEYCHAIN_PATH"
 
       - name: Import Certificate
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           security import "$CERTIFICATE_PATH" \
             -k "$KEYCHAIN_PATH" \
@@ -95,6 +178,7 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
       - name: Install Provisioning Profile
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           security cms -D -i "$PROFILE_PATH" > /tmp/profile.plist
           UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
@@ -102,6 +186,7 @@ jobs:
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
       - name: Get Next TestFlight Build Number
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         working-directory: ios
         env:
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
@@ -111,6 +196,7 @@ jobs:
           bundle exec fastlane next_build_number
 
       - name: Read Build Number
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         id: build
         run: |
           BUILD=$(cat ios/next_build.txt)
@@ -118,6 +204,7 @@ jobs:
           echo "Next Build Number: $BUILD"          
 
       - name: Build IPA
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           flutter build ipa \
             --release \
@@ -125,24 +212,29 @@ jobs:
             --export-options-plist=ios/ExportOptions.plist
 
       - name: Verify Build
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         run: |
           APP=$(find build/ios/archive -name Runner.app | head -1)
           /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Info.plist"
 
       - name: Locate IPA
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         id: ipa
         run: |
           IPA=$(find build -name "*.ipa" | head -1)
           test -n "$IPA"
           echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
+        uses: actions/upload-artifact@v4
         with:
           name: ios-release-ipa
           path: ${{ steps.ipa.outputs.ipa }}
 
       - name: Upload to TestFlight
+        if: github.event_name == 'push' && github.ref_name == 'ios-app'
         uses: apple-actions/upload-testflight-build@v1
         with:
           app-path: ${{ steps.ipa.outputs.ipa }}
@@ -150,6 +242,6 @@ jobs:
           api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
 
-      - name: Cleanup
+      - name: Cleanup Keychain
         if: always()
         run: security delete-keychain "$KEYCHAIN_PATH" || true

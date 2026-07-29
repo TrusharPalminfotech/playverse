@@ -1,20 +1,36 @@
-name: Android CI Build
+name: Android CI Build & SonarCloud Analysis
 
 on:
   push:
     branches:
       - android-app
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   build_android:
-    name: Build Android APK
+    name: Build Android & Run SonarCloud
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout Repository
+      # Step 1: Checkout Repository (fetch-depth: 0 is required for SonarCloud scan accuracy)
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Setup Java
       - name: Setup Java
@@ -23,7 +39,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Setup Flutter
+      # Step 2: Setup Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -31,7 +47,7 @@ jobs:
           channel: stable
           cache: true
 
-      # Cache Pub Packages
+      # Step 3: Cache Pub Packages (Performance Optimization)
       - name: Cache Pub Dependencies
         uses: actions/cache@v4
         with:
@@ -40,24 +56,75 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
-      # Install Dependencies
+      # Step 3b: Cache Gradle (Performance Optimization for Android build)
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # Step 4: Install Dependencies (Avoid Clean to utilize cache)
       - name: Install Dependencies
         run: flutter pub get
 
-      # Analyze Project
+      # Step 5: Run Build Runner code generation for Mock tests
+      - name: Run Build Runner
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      # Step 6: Flutter Analyze (fails if analyzer reports errors)
       - name: Analyze Project
         run: flutter analyze
 
-      # Run Tests
-      - name: Run Tests
-        run: flutter test
+      # Step 7: Flutter Test with Coverage
+      - name: Run Tests with Coverage
+        run: flutter test --coverage
+
+      # Step 7b: Validate Coverage File Exists (fails immediately if missing)
+      - name: Validate Coverage File Exists
+        run: |
+          if [ ! -f "coverage/lcov.info" ]; then
+            echo "Error: coverage/lcov.info is missing!"
+            exit 1
+          fi
+
+      # Step 7c: Upload Coverage Artifacts for Debugging
+      - name: Upload Coverage Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-coverage-android
+          path: coverage/
+          retention-days: 7
+
+      # Step 8: SonarCloud Scan
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Step 9: SonarCloud Quality Gate Check
+      - name: SonarCloud Quality Gate Check
+        uses: sonarsource/sonarqube-quality-gate-action@v1
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ----------------------------------------------------
+      # ANDROID COMPILATION & DEPLOYMENT (Only run on android-app branch pushes)
+      # ----------------------------------------------------
 
       # Build Release APK
       - name: Build Release APK
+        if: github.event_name == 'push' && github.ref_name == 'android-app'
         run: flutter build apk --release
 
       # Upload APK as GitHub Artifact
       - name: Upload APK Artifact
+        if: github.event_name == 'push' && github.ref_name == 'android-app'
         uses: actions/upload-artifact@v4
         with:
           name: android-release-apk
@@ -66,6 +133,7 @@ jobs:
 
       # Upload to Firebase App Distribution
       - name: Distribute APK to Firebase
+        if: github.event_name == 'push' && github.ref_name == 'android-app'
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: 1:571465372112:android:718ba8173d05bf38c069d5
@@ -73,7 +141,7 @@ jobs:
           groups: qa-testers
           file: build/app/outputs/flutter-apk/app-release.apk
           releaseNotes: |
-            🚀 Automated Android Build
+            🚀 Automated Android Build & SonarCloud Verified
 
             Branch: ${{ github.ref_name }}
             Commit: ${{ github.sha }}
