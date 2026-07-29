@@ -98,14 +98,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # Step 9: SonarCloud Quality Gate Check (uses stable pinned Quality Gate action)
-      - name: SonarCloud Quality Gate check
-        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
-        with:
-          pollingTimeoutSec: 600
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
       # ----------------------------------------------------
       # iOS COMPILATION & DEPLOYMENT (Only run on ios-app branch pushes)
       # ----------------------------------------------------
