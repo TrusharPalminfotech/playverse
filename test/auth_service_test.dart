@@ -15,7 +15,7 @@ int failedCases = 0;
 void runTest(String description, dynamic Function() body) {
   totalCases++;
   test(description, () async {
-    print('Running Test: $description');
+    print('Runnig Test: $description');
     try {
       await body();
       passedCases++;
