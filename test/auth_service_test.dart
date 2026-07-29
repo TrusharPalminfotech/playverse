@@ -194,5 +194,54 @@ void main() {
         findsOneWidget,
       );
     });
+
+    runWidgetTest('displays exception snackbar when auth throws error', (
+      WidgetTester tester,
+    ) async {
+      configureViewSize(tester);
+
+      // Stub MockAuthService to throw an exception
+      when(mockAuthService.login(any, any, any)).thenAnswer((_) async {
+        await Future.delayed(const Duration(milliseconds: 50));
+        throw Exception('Network Timeout');
+      });
+
+      // Build our app and inject the mockAuthService
+      await tester.pumpWidget(
+        MaterialApp(home: LoginScreen(authService: mockAuthService)),
+      );
+
+      // Enter credentials
+      final emailFieldFinder = find.byType(TextFormField).first;
+      final passwordFieldFinder = find.byType(TextFormField).at(1);
+      await tester.enterText(emailFieldFinder, 'admin@playverse.com');
+      await tester.enterText(passwordFieldFinder, 'password123');
+
+      // Tap log in
+      await tester.tap(find.text('SECURE LOG IN'));
+      await tester.pump(); // Start request
+
+      await tester.pumpAndSettle();
+
+      // Verify the exception snackbar is visible
+      expect(find.text('Error: Exception: Network Timeout'), findsOneWidget);
+    });
+
+    runWidgetTest('loads in mobile viewport and displays mobile header', (
+      WidgetTester tester,
+    ) async {
+      // Set a mobile screen size (using width 500 to fit Ahem test font widths)
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(home: LoginScreen(authService: mockAuthService)),
+      );
+
+      // Verify mobile header icons/widgets are rendered
+      expect(find.byIcon(Icons.sports_tennis_rounded), findsOneWidget);
+    });
   });
 }
