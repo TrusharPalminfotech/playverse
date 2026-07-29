@@ -86,7 +86,7 @@ The SonarCloud analysis is integrated directly into the `.github/workflows/ios-c
    - **Flutter Test with Coverage**: Runs tests and outputs `coverage/lcov.info` file.
    - **Coverage Verification**: Verifies `coverage/lcov.info` exists and immediately fails the build if missing.
    - **Coverage Artifact Upload**: Uploads the `coverage` directory to the job artifacts for developer download and debugging.
-   - **SonarCloud Scan**: Invokes the pinned stable `sonarsource/sonarqube-scan-action@v4` scanner, sending code statistics and test coverage to SonarCloud.
+   - **SonarCloud Scan**: Invokes the pinned stable `sonarsource/sonarqube-scan-action@v6` scanner, sending code statistics and test coverage to SonarCloud.
    - **Quality Gate Check**: Utilizes pinned stable `sonarsource/sonarqube-quality-gate-action@v1` to poll the server. If the Quality Gate fails, the workflow terminates, failing the build and blocking deployment.
    - **iOS Compilation & TestFlight**: Runs conditionally `if: github.event_name == 'push' && github.ref_name == 'ios-app'` to compile and upload the IPA to Apple TestFlight.
 

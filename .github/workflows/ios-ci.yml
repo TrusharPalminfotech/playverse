@@ -94,7 +94,7 @@ jobs:
 
       # Step 8: SonarCloud Scan (uses stable pinned SonarQube scan action compatible with SonarCloud)
       - name: SonarCloud Scan
-        uses: sonarsource/sonarqube-scan-action@v4
+        uses: sonarsource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
