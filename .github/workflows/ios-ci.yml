@@ -94,9 +94,10 @@ jobs:
 
       # Step 8: SonarCloud Scan (uses stable pinned SonarQube scan action compatible with SonarCloud)
       - name: SonarCloud Scan
-        uses: sonarsource/sonarqube-scan-action@v6
+        uses: sonarsource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       # ----------------------------------------------------
       # iOS COMPILATION & DEPLOYMENT (Only run on ios-app branch pushes)
